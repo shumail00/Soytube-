@@ -57,10 +57,10 @@ fun ExoPlayerView(
     DisposableEffect(lifecycleOwner, player) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                LifecycleEvent.ON_START, LifecycleEvent.ON_RESUME -> {
+                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> {
                     playerView.player = player
                 }
-                LifecycleEvent.ON_STOP -> {
+                Lifecycle.Event.ON_STOP -> {
                     // Detach surface to release hardware video decoder
                     playerView.player = null
                 }

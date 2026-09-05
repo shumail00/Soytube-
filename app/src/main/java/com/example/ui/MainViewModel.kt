@@ -12,6 +12,7 @@ import com.example.SoyTubeApplication
 import com.example.data.model.VideoCard
 import com.example.data.model.VideoComment
 import com.example.data.model.VideoTab
+import com.example.network.InnerTubeApiClient
 import com.example.player.PlaybackService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow

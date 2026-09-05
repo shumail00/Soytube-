@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.MainViewModel
@@ -137,8 +138,8 @@ fun PhoneLayout(
             // Collapsible top player surface
             AnimatedVisibility(
                 visible = isPlayerExpanded && activeTab != null,
-                enter = expandVertically(animationSpec = SoyTubeMotion.bouncySpring()),
-                exit = shrinkVertically(animationSpec = SoyTubeMotion.bouncySpring())
+                enter = expandVertically(animationSpec = SoyTubeMotion.bouncySpring<IntSize>()),
+                exit = shrinkVertically(animationSpec = SoyTubeMotion.bouncySpring<IntSize>())
             ) {
                 Column(
                     modifier = Modifier
