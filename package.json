@@ -1,0 +1,7 @@
+{
+  "name": "soytube-android",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo 'Scaffolding verified'"
+  }
+}

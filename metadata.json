@@ -1,0 +1,6 @@
+{
+  "name": "SoyTube",
+  "description": "Open-source, bloat-free YouTube client with multi-tab playback, background audio, and tablet adaptive layout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
