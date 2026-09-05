@@ -4,8 +4,10 @@ import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -151,9 +153,16 @@ fun LoginWebViewDialog(
                 // In-App WebView
                 AndroidView(
                     factory = { context ->
+                        try {
+                            File(context.cacheDir, "WebView/Default/HTTP Cache/Code Cache/wasm").mkdirs()
+                            File(context.cacheDir, "WebView/Default/HTTP Cache/Code Cache/js").mkdirs()
+                        } catch (_: Exception) {}
+
                         WebView(context).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
+                            settings.databaseEnabled = true
+                            settings.cacheMode = WebSettings.LOAD_DEFAULT
                             settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
 
                             CookieManager.getInstance().setAcceptCookie(true)

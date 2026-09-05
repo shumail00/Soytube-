@@ -18,16 +18,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Subscriptions
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Subscriptions
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -41,8 +47,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
@@ -64,8 +68,10 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.VideoCard
 import com.example.ui.MainViewModel
 import com.example.ui.NavSection
+import com.example.ui.components.DesktopBrowserTabBar
 import com.example.ui.components.ExoPlayerView
 import com.example.ui.components.TabItem
+import com.example.ui.components.ThinnerSearchBar
 import com.example.ui.components.VideoCardItem
 import com.example.ui.components.handleExternalKeyboard
 
@@ -83,6 +89,11 @@ fun TabletLayout(
     val currentNav by viewModel.currentNav.collectAsState()
     val comments by viewModel.comments.collectAsState()
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+    val savedVideos by viewModel.savedVideos.collectAsState()
+    val backgroundAudioEnabled by viewModel.backgroundAudioEnabled.collectAsState()
+
+    val isResolvingStream by viewModel.isResolvingStream.collectAsState()
+    val streamError by viewModel.streamError.collectAsState()
 
     val playbackService = viewModel.getService()
     var showKeyboardHelper by remember { mutableStateOf(false) }
@@ -98,11 +109,11 @@ fun TabletLayout(
         // Persistent Navigation Rail + Tab Stack Drawer
         Row(
             modifier = Modifier
-                .width(360.dp)
+                .width(340.dp)
                 .fillMaxHeight()
                 .background(MaterialTheme.colorScheme.surfaceContainerLow)
         ) {
-            // 1. Navigation Rail
+            // 1. Navigation Rail (Home, Subscriptions, Account)
             NavigationRail(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -114,23 +125,71 @@ fun TabletLayout(
                 NavigationRailItem(
                     selected = currentNav == NavSection.HOME,
                     onClick = { viewModel.setNavSection(NavSection.HOME) },
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                    icon = {
+                        Icon(
+                            imageVector = if (currentNav == NavSection.HOME) Icons.Filled.Home else Icons.Outlined.Home,
+                            contentDescription = "Home"
+                        )
+                    },
                     label = { Text("Home") },
                     modifier = Modifier.testTag("tablet_nav_home")
                 )
+
                 NavigationRailItem(
-                    selected = currentNav == NavSection.HISTORY,
-                    onClick = { viewModel.setNavSection(NavSection.HISTORY) },
-                    icon = { Icon(Icons.Default.History, contentDescription = "History") },
-                    label = { Text("History") },
-                    modifier = Modifier.testTag("tablet_nav_history")
+                    selected = currentNav == NavSection.SUBSCRIPTIONS,
+                    onClick = { viewModel.setNavSection(NavSection.SUBSCRIPTIONS) },
+                    icon = {
+                        Icon(
+                            imageVector = if (currentNav == NavSection.SUBSCRIPTIONS) Icons.Filled.Subscriptions else Icons.Outlined.Subscriptions,
+                            contentDescription = "Subscriptions"
+                        )
+                    },
+                    label = { Text("Subscriptions") },
+                    modifier = Modifier.testTag("tablet_nav_subscriptions")
                 )
+
                 NavigationRailItem(
-                    selected = currentNav == NavSection.BOOKMARKS,
-                    onClick = { viewModel.setNavSection(NavSection.BOOKMARKS) },
-                    icon = { Icon(Icons.Default.Bookmark, contentDescription = "Bookmarks") },
-                    label = { Text("Saved") },
-                    modifier = Modifier.testTag("tablet_nav_bookmarks")
+                    selected = currentNav == NavSection.NOTIFICATIONS,
+                    onClick = { viewModel.setNavSection(NavSection.NOTIFICATIONS) },
+                    icon = {
+                        val unreadCount by viewModel.unreadNotificationCount.collectAsState()
+                        BadgedBox(badge = {
+                            if (unreadCount > 0) {
+                                Badge {
+                                    Text(
+                                        text = if (unreadCount > 9) "9+" else "$unreadCount",
+                                        fontSize = 9.sp
+                                    )
+                                }
+                            }
+                        }) {
+                            Icon(
+                                imageVector = if (currentNav == NavSection.NOTIFICATIONS) Icons.Filled.Notifications else Icons.Outlined.Notifications,
+                                contentDescription = "Notifications"
+                            )
+                        }
+                    },
+                    label = { Text("Alerts") },
+                    modifier = Modifier.testTag("tablet_nav_notifications")
+                )
+
+                NavigationRailItem(
+                    selected = currentNav == NavSection.ACCOUNT,
+                    onClick = { viewModel.setNavSection(NavSection.ACCOUNT) },
+                    icon = {
+                        BadgedBox(badge = {
+                            if (isLoggedIn) {
+                                Badge(modifier = Modifier.size(6.dp))
+                            }
+                        }) {
+                            Icon(
+                                imageVector = if (currentNav == NavSection.ACCOUNT) Icons.Filled.AccountCircle else Icons.Outlined.AccountCircle,
+                                contentDescription = "Account"
+                            )
+                        }
+                    },
+                    label = { Text("Account") },
+                    modifier = Modifier.testTag("tablet_nav_account")
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -138,27 +197,12 @@ fun TabletLayout(
                 // External Keyboard Guide Trigger
                 IconButton(
                     onClick = { showKeyboardHelper = !showKeyboardHelper },
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 16.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Keyboard,
                         contentDescription = "Keyboard Shortcuts",
                         tint = if (showKeyboardHelper) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                // Account / Cookie Auth
-                IconButton(
-                    onClick = { viewModel.showLoginDialog(true) },
-                    modifier = Modifier
-                        .padding(bottom = 16.dp)
-                        .testTag("tablet_account_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AccountCircle,
-                        contentDescription = "Account & Cookies",
-                        tint = if (isLoggedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(32.dp)
                     )
                 }
             }
@@ -181,7 +225,7 @@ fun TabletLayout(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Tab Stack (${tabs.size})",
+                        text = "Tabs (${tabs.size})",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -226,21 +270,22 @@ fun TabletLayout(
                                 tab = tab,
                                 isActive = tab.tabId == activeTabId,
                                 onSelect = { viewModel.switchTab(tab.tabId) },
-                                onClose = { viewModel.closeTab(tab.tabId) },
-                                modifier = Modifier.fillMaxWidth()
+                                onClose = { viewModel.closeTab(tab.tabId) }
                             )
                         }
                     }
                 }
 
-                // Keyboard Shortcuts Helper Panel
+                // Keyboard Helper Card when triggered
                 if (showKeyboardHelper) {
-                    Surface(
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
                             Text(
@@ -263,211 +308,357 @@ fun TabletLayout(
         VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
         // ==================== RIGHT / MAIN PANE ====================
-        // Large 16:9 ExoPlayer SurfaceView on top + scrollable tab feed/comments underneath
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Top Search Bar
-            Row(
+            // 1. Desktop Browser Tab Bar at the top of the right pane with rounded header
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 2.dp,
+                shadowElevation = 3.dp
             ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.onSearchQueryChanged(it) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("tablet_search_input"),
-                    placeholder = { Text("Search videos or paste YouTube link...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear")
-                            }
-                        }
-                    },
-                    shape = RoundedCornerShape(24.dp),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    DesktopBrowserTabBar(
+                        tabs = tabs,
+                        activeTabId = activeTabId,
+                        onSelectTab = { viewModel.switchTab(it) },
+                        onCloseTab = { viewModel.closeTab(it) },
+                        onNewTab = { viewModel.createNewHomeTab() }
                     )
-                )
-            }
 
-            // Large 16:9 ExoPlayer SurfaceView
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color.Black)
-            ) {
-                ExoPlayerView(
-                    player = playbackService?.player,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                )
-            }
-
-            // Video Meta & Details
-            activeTab?.let { tab ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = tab.title,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${tab.channelTitle} • SoyTube Background Media Engine",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Button(
-                        onClick = { viewModel.openVideoInTab(
-                            VideoCard(
-                                videoId = tab.videoId,
-                                title = tab.title,
-                                channelTitle = tab.channelTitle,
-                                thumbnailUrl = tab.thumbnailUrl
-                            ),
-                            activateImmediately = false
-                        ) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
+                    // 2. Thinner Search / Address Bar with "Search or link"
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Duplicate Tab")
+                        ThinnerSearchBar(
+                            query = searchQuery,
+                            onQueryChange = { viewModel.onSearchQueryChanged(it) },
+                            onSearch = { viewModel.submitSearchOrLink(searchQuery) }
+                        )
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
 
-            // Scrollable Content Underneath: Comments and Recommended Feed Side-by-Side or Staggered
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                // Comments Column (Left sub-column of right pane)
-                Column(
-                    modifier = Modifier
-                        .weight(0.45f)
-                        .fillMaxHeight()
-                        .padding(end = 8.dp)
-                        .testTag("tablet_comments_column")
-                ) {
-                    Text(
-                        text = "Comments (${comments.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
+            // 3. Main Content based on Navigation
+            when (currentNav) {
+                NavSection.SUBSCRIPTIONS -> {
+                    SubscriptionsView(
+                        viewModel = viewModel,
+                        onPlayVideo = { video -> viewModel.openVideoInTab(video, activateImmediately = true) },
+                        onOpenInNewTab = { video -> viewModel.openVideoInTab(video, activateImmediately = false) },
+                        modifier = Modifier.weight(1f)
                     )
+                }
 
-                    if (comments.isEmpty()) {
-                        Text(
-                            text = "No comments available for this stream",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(bottom = 16.dp)
-                        ) {
-                            items(comments, key = { it.commentId }) { comment ->
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                    ),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "@${comment.author}",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
+                NavSection.NOTIFICATIONS -> {
+                    NotificationsView(
+                        viewModel = viewModel,
+                        onPlayVideo = { video -> viewModel.openVideoInTab(video, activateImmediately = true) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                NavSection.ACCOUNT -> {
+                    AccountView(
+                        viewModel = viewModel,
+                        onPlayVideo = { video -> viewModel.openVideoInTab(video, activateImmediately = true) },
+                        onOpenInNewTab = { video -> viewModel.openVideoInTab(video, activateImmediately = false) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                NavSection.HOME -> {
+                    val isPlayingActiveVideo = activeTab != null && activeTab?.videoId?.isNotEmpty() == true
+
+                    if (isPlayingActiveVideo) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Large 16:9 ExoPlayer SurfaceView
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color.Black),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ExoPlayerView(
+                                    player = playbackService?.player,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(16f / 9f)
+                                )
+        
+                                if (isResolvingStream) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(alpha = 0.7f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            CircularProgressIndicator(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(36.dp)
                                             )
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Spacer(modifier = Modifier.height(10.dp))
                                             Text(
-                                                text = comment.publishedTime,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                text = "Resolving stream...",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = Color.White
                                             )
                                         }
-                                        Spacer(modifier = Modifier.height(4.dp))
+                                    }
+                                }
+                            }
+        
+                            // Video Meta & Details
+                            activeTab?.let { tab ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = comment.text,
-                                            style = MaterialTheme.typography.bodySmall
+                                            text = tab.title,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
+                                        Text(
+                                            text = "${tab.channelTitle} • SoyTube Background Media Engine",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+        
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        androidx.compose.material3.IconButton(
+                                            onClick = { viewModel.toggleBackgroundAudio() },
+                                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Headphones,
+                                                contentDescription = "Background Audio",
+                                                tint = if (backgroundAudioEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+
+                                        androidx.compose.material3.IconButton(
+                                            onClick = {
+                                                viewModel.toggleSaveVideo(
+                                                    VideoCard(
+                                                        videoId = tab.videoId,
+                                                        title = tab.title,
+                                                        channelTitle = tab.channelTitle,
+                                                        thumbnailUrl = tab.thumbnailUrl
+                                                    )
+                                                )
+                                            },
+                                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                                        ) {
+                                            val isSaved = savedVideos.any { it.videoId == tab.videoId }
+                                            Icon(
+                                                imageVector = if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                                contentDescription = "Save Video",
+                                                tint = if (isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+
+                                        Button(
+                                            onClick = {
+                                                viewModel.openVideoInTab(
+                                                    VideoCard(
+                                                        videoId = tab.videoId,
+                                                        title = tab.title,
+                                                        channelTitle = tab.channelTitle,
+                                                        thumbnailUrl = tab.thumbnailUrl
+                                                    ),
+                                                    activateImmediately = false
+                                                )
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Duplicate Tab")
+                                        }
+                                    }
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                            }
+        
+                            // Scrollable Content Underneath: Comments and Recommended Feed Side-by-Side
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                // Comments Column
+                                Column(
+                                    modifier = Modifier
+                                        .weight(0.45f)
+                                        .fillMaxHeight()
+                                        .padding(end = 8.dp)
+                                        .testTag("tablet_comments_column")
+                                ) {
+                                    Text(
+                                        text = "Comments (${comments.size})",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+        
+                                    if (comments.isEmpty()) {
+                                        Text(
+                                            text = "No comments available for this stream",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    } else {
+                                        LazyColumn(
+                                            modifier = Modifier.fillMaxSize(),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            contentPadding = PaddingValues(bottom = 16.dp)
+                                        ) {
+                                            items(comments, key = { it.commentId }) { comment ->
+                                                Card(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                                    ),
+                                                    shape = RoundedCornerShape(12.dp)
+                                                ) {
+                                                    Column(modifier = Modifier.padding(10.dp)) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text(
+                                                                text = "@${comment.author}",
+                                                                style = MaterialTheme.typography.labelMedium,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = MaterialTheme.colorScheme.primary
+                                                            )
+                                                            Spacer(modifier = Modifier.width(8.dp))
+                                                            Text(
+                                                                text = comment.publishedTime,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
+                                                        }
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        Text(
+                                                            text = comment.text,
+                                                            style = MaterialTheme.typography.bodySmall
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+        
+                                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+        
+                                // Recommendations / Search Results Column
+                                Column(
+                                    modifier = Modifier
+                                        .weight(0.55f)
+                                        .fillMaxHeight()
+                                        .padding(start = 8.dp)
+                                        .testTag("tablet_feed_column")
+                                ) {
+                                    Text(
+                                        text = if (searchQuery.isNotEmpty()) "Search Results" else "Recommended Videos",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+        
+                                    if (isFeedLoading) {
+                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                            CircularProgressIndicator()
+                                        }
+                                    } else {
+                                        LazyColumn(
+                                            modifier = Modifier.fillMaxSize(),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                                            contentPadding = PaddingValues(bottom = 16.dp)
+                                        ) {
+                                            items(homeFeed, key = { it.videoId }) { video ->
+                                                VideoCardItem(
+                                                    video = video,
+                                                    onPlayNow = {
+                                                        viewModel.openVideoInTab(video, activateImmediately = true)
+                                                    },
+                                                    onOpenInNewTab = {
+                                                        viewModel.openVideoInTab(video, activateImmediately = false)
+                                                    }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                }
-
-                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
-
-                // Recommendations / Up Next Feed Column (Right sub-column of right pane)
-                Column(
-                    modifier = Modifier
-                        .weight(0.55f)
-                        .fillMaxHeight()
-                        .padding(start = 8.dp)
-                        .testTag("tablet_recommendations_column")
-                ) {
-                    Text(
-                        text = if (searchQuery.isNotEmpty()) "Search Results" else "Up Next / Recommendations",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    if (isFeedLoading) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
                     } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(bottom = 24.dp)
-                        ) {
-                            items(homeFeed, key = { it.videoId }) { video ->
-                                VideoCardItem(
-                                    video = video,
-                                    onPlayNow = { viewModel.openVideoInTab(video, activateImmediately = true) },
-                                    onOpenInNewTab = { viewModel.openVideoInTab(video, activateImmediately = false) }
-                                )
+                        // Standard Home Feed List for empty Home Tab
+                        if (isFeedLoading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .weight(1f)
+                                    .testTag("tablet_feed_list"),
+                                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 32.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                item {
+                                    Text(
+                                        text = if (searchQuery.isNotEmpty()) "Search Results" else "Recommended",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                }
+
+                                items(homeFeed, key = { it.videoId }) { video ->
+                                    VideoCardItem(
+                                        video = video,
+                                        onPlayNow = {
+                                            viewModel.openVideoInTab(video, activateImmediately = true)
+                                        },
+                                        onOpenInNewTab = {
+                                            viewModel.openVideoInTab(video, activateImmediately = false)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }

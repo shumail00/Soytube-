@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,33 +13,24 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -53,16 +43,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.data.model.VideoCard
 import com.example.ui.MainViewModel
 import com.example.ui.NavSection
+import com.example.ui.components.DesktopBrowserTabBar
 import com.example.ui.components.ExoPlayerView
+import com.example.ui.components.FloatingPillNavBar
 import com.example.ui.components.MiniPlayer
-import com.example.ui.components.TabItem
+import com.example.ui.components.ThinnerSearchBar
 import com.example.ui.components.VideoCardItem
+import com.example.ui.components.YouTubeStylePlayerDetails
 import com.example.ui.theme.SoyTubeMotion
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,278 +71,291 @@ fun PhoneLayout(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val currentNav by viewModel.currentNav.collectAsState()
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
+    val isResolvingStream by viewModel.isResolvingStream.collectAsState()
     val comments by viewModel.comments.collectAsState()
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+    val savedVideos by viewModel.savedVideos.collectAsState()
+    val backgroundAudioEnabled by viewModel.backgroundAudioEnabled.collectAsState()
+    val unreadNotificationCount by viewModel.unreadNotificationCount.collectAsState()
 
     val playbackService = viewModel.getService()
+    val isPlayingActiveVideo = isPlayerExpanded && activeTab != null && activeTab?.videoId?.isNotEmpty() == true
 
-    Scaffold(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .testTag("phone_layout_scaffold"),
-        bottomBar = {
-            Column {
-                // Bottom-docked mini-player when collapsed
-                if (!isPlayerExpanded && activeTab != null) {
-                    MiniPlayer(
-                        activeTab = activeTab,
-                        playbackService = playbackService,
-                        onExpand = { viewModel.setPlayerExpanded(true) },
-                        onClose = { activeTab?.let { viewModel.closeTab(it.tabId) } }
-                    )
-                }
-
-                // Standard Material 3 Bottom Navigation Bar
-                NavigationBar(
-                    modifier = Modifier.testTag("phone_bottom_navigation"),
-                    tonalElevation = 6.dp
-                ) {
-                    NavigationBarItem(
-                        selected = currentNav == NavSection.HOME,
-                        onClick = { viewModel.setNavSection(NavSection.HOME) },
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                        label = { Text("Home") },
-                        modifier = Modifier.testTag("nav_home")
-                    )
-                    NavigationBarItem(
-                        selected = currentNav == NavSection.HISTORY,
-                        onClick = { viewModel.setNavSection(NavSection.HISTORY) },
-                        icon = { Icon(Icons.Default.History, contentDescription = "History") },
-                        label = { Text("History") },
-                        modifier = Modifier.testTag("nav_history")
-                    )
-                    NavigationBarItem(
-                        selected = currentNav == NavSection.BOOKMARKS,
-                        onClick = { viewModel.setNavSection(NavSection.BOOKMARKS) },
-                        icon = { Icon(Icons.Default.Bookmark, contentDescription = "Bookmarks") },
-                        label = { Text("Bookmarks") },
-                        modifier = Modifier.testTag("nav_bookmarks")
-                    )
-                }
-            }
-        }
-    ) { innerPadding ->
+            .background(MaterialTheme.colorScheme.background)
+            .testTag("phone_layout_scaffold")
+    ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Collapsible top player surface
-            AnimatedVisibility(
-                visible = isPlayerExpanded && activeTab != null,
-                enter = expandVertically(animationSpec = SoyTubeMotion.bouncySpring<IntSize>()),
-                exit = shrinkVertically(animationSpec = SoyTubeMotion.bouncySpring<IntSize>())
+            // 1. Desktop Browser Tab Bar at the VERY TOP with Rounded Header Container
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 2.dp,
+                shadowElevation = 4.dp
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.Black)
+                        .statusBarsPadding()
                 ) {
-                    // ExoPlayer View
-                    ExoPlayerView(
-                        player = playbackService?.player,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // Video Meta Header with collapse chevron
-                    activeTab?.let { tab ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceContainer)
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = tab.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = tab.channelTitle,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(
-                                onClick = { viewModel.setPlayerExpanded(false) },
-                                modifier = Modifier.testTag("collapse_player_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Collapse Player"
-                                )
-                            }
+                    DesktopBrowserTabBar(
+                        tabs = tabs,
+                        activeTabId = activeTabId,
+                        onSelectTab = { tabId ->
+                            viewModel.switchTab(tabId)
+                            viewModel.setPlayerExpanded(true)
+                        },
+                        onCloseTab = { tabId ->
+                            viewModel.closeTab(tabId)
+                        },
+                        onNewTab = {
+                            viewModel.createNewHomeTab()
                         }
-                    }
-                }
-            }
-
-            // Top Search & Auth Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.onSearchQueryChanged(it) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("phone_search_input"),
-                    placeholder = { Text("Search videos or paste YouTube link...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear")
-                            }
-                        }
-                    },
-                    shape = RoundedCornerShape(24.dp),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
                     )
-                )
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                IconButton(
-                    onClick = { viewModel.showLoginDialog(true) },
-                    modifier = Modifier.testTag("phone_account_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AccountCircle,
-                        contentDescription = "Account & Cookies",
-                        tint = if (isLoggedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
-
-            // Horizontal scrollable Tab Row above video meta container
-            if (tabs.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp)
-                        .testTag("phone_tab_row"),
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(tabs, key = { it.tabId }) { tab ->
-                        TabItem(
-                            tab = tab,
-                            isActive = tab.tabId == activeTabId,
-                            onSelect = {
-                                viewModel.switchTab(tab.tabId)
-                                viewModel.setPlayerExpanded(true)
-                            },
-                            onClose = { viewModel.closeTab(tab.tabId) }
+                    // 2. Thinner Search / Address Bar with "Search or link"
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        ThinnerSearchBar(
+                            query = searchQuery,
+                            onQueryChange = { viewModel.onSearchQueryChanged(it) },
+                            onSearch = { viewModel.submitSearchOrLink(searchQuery) }
                         )
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             }
 
-            // Content Area based on currentNav
+            // 3. Main Body Content based on Navigation & Active Video Playback
             when (currentNav) {
                 NavSection.HOME -> {
-                    if (isFeedLoading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    } else {
-                        LazyColumn(
+                    if (isPlayingActiveVideo) {
+                        val currentTab = activeTab!!
+                        val isCurrentVideoSaved = savedVideos.any { it.videoId == currentTab.videoId }
+
+                        // YouTube-style Player view & details
+                        Column(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .weight(1f)
-                                .testTag("phone_feed_list"),
-                            contentPadding = PaddingValues(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                                .verticalScroll(rememberScrollState())
                         ) {
-                            // If video is active, show comments section first
-                            if (activeTab != null && isPlayerExpanded && comments.isNotEmpty()) {
-                                item {
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            // Video Player Screen
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.Black),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ExoPlayerView(
+                                    player = playbackService?.player,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                // Top collapse chevron overlay
+                                IconButton(
+                                    onClick = { viewModel.setPlayerExpanded(false) },
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(8.dp)
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.45f))
+                                        .testTag("collapse_player_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Collapse Player",
+                                        tint = Color.White
+                                    )
+                                }
+
+                                if (isResolvingStream) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .matchParentSize()
+                                            .background(Color.Black.copy(alpha = 0.7f)),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Column(modifier = Modifier.padding(12.dp)) {
-                                            Text(
-                                                text = "Comments (${comments.size})",
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.Bold
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            CircularProgressIndicator(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
                                             )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            comments.take(2).forEach { comment ->
-                                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                                    Text(
-                                                        text = "@${comment.author} • ${comment.publishedTime}",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.primary
-                                                    )
-                                                    Text(
-                                                        text = comment.text,
-                                                        style = MaterialTheme.typography.bodySmall
-                                                    )
-                                                }
-                                            }
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Resolving stream...",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.White
+                                            )
                                         }
                                     }
                                 }
                             }
 
-                            item {
-                                Text(
-                                    text = if (searchQuery.isNotEmpty()) "Search Results" else "Recommended Videos",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                )
+                            // YouTube-style details: title, subscribe, actions, description, comments, recommendations
+                            YouTubeStylePlayerDetails(
+                                tab = currentTab,
+                                comments = comments,
+                                recommendedVideos = homeFeed.filter { it.videoId != currentTab.videoId },
+                                isSaved = isCurrentVideoSaved,
+                                backgroundAudioEnabled = backgroundAudioEnabled,
+                                onToggleSave = {
+                                    viewModel.toggleSaveVideo(
+                                        VideoCard(
+                                            videoId = currentTab.videoId,
+                                            title = currentTab.title,
+                                            channelTitle = currentTab.channelTitle,
+                                            thumbnailUrl = currentTab.thumbnailUrl
+                                        )
+                                    )
+                                },
+                                onToggleBackgroundAudio = {
+                                    viewModel.toggleBackgroundAudio()
+                                },
+                                onOpenInNewTab = {
+                                    viewModel.openVideoInTab(
+                                        VideoCard(
+                                            videoId = currentTab.videoId,
+                                            title = currentTab.title,
+                                            channelTitle = currentTab.channelTitle,
+                                            thumbnailUrl = currentTab.thumbnailUrl
+                                        ),
+                                        activateImmediately = false
+                                    )
+                                },
+                                onPlayVideo = { video ->
+                                    viewModel.openVideoInTab(video, activateImmediately = true)
+                                },
+                                onAddComment = { commentText ->
+                                    viewModel.addComment(commentText)
+                                }
+                            )
+                        }
+                    } else {
+                        // Standard Home Feed List
+                        if (isFeedLoading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
                             }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .weight(1f)
+                                    .testTag("phone_feed_list"),
+                                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 96.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                item {
+                                    Text(
+                                        text = if (searchQuery.isNotEmpty()) "Search Results" else "Recommended",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+                                }
 
-                            items(homeFeed, key = { it.videoId }) { video ->
-                                VideoCardItem(
-                                    video = video,
-                                    onPlayNow = {
-                                        viewModel.openVideoInTab(video, activateImmediately = true)
-                                        viewModel.setPlayerExpanded(true)
-                                    },
-                                    onOpenInNewTab = {
-                                        viewModel.openVideoInTab(video, activateImmediately = false)
-                                    }
-                                )
+                                items(homeFeed, key = { it.videoId }) { video ->
+                                    VideoCardItem(
+                                        video = video,
+                                        onPlayNow = {
+                                            viewModel.openVideoInTab(video, activateImmediately = true)
+                                            viewModel.setPlayerExpanded(true)
+                                        },
+                                        onOpenInNewTab = {
+                                            viewModel.openVideoInTab(video, activateImmediately = false)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
-                NavSection.HISTORY, NavSection.BOOKMARKS -> {
-                    HistoryAndBookmarksView(
-                        section = currentNav,
-                        onPlayVideo = {
-                            viewModel.openVideoInTab(it, activateImmediately = true)
+
+                NavSection.SUBSCRIPTIONS -> {
+                    SubscriptionsView(
+                        viewModel = viewModel,
+                        onPlayVideo = { video ->
+                            viewModel.openVideoInTab(video, activateImmediately = true)
                             viewModel.setPlayerExpanded(true)
                         },
-                        onOpenInNewTab = {
-                            viewModel.openVideoInTab(it, activateImmediately = false)
+                        onOpenInNewTab = { video ->
+                            viewModel.openVideoInTab(video, activateImmediately = false)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                NavSection.NOTIFICATIONS -> {
+                    NotificationsView(
+                        viewModel = viewModel,
+                        onPlayVideo = { video ->
+                            viewModel.openVideoInTab(video, activateImmediately = true)
+                            viewModel.setPlayerExpanded(true)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                NavSection.ACCOUNT -> {
+                    AccountView(
+                        viewModel = viewModel,
+                        onPlayVideo = { video ->
+                            viewModel.openVideoInTab(video, activateImmediately = true)
+                            viewModel.setPlayerExpanded(true)
+                        },
+                        onOpenInNewTab = { video ->
+                            viewModel.openVideoInTab(video, activateImmediately = false)
                         },
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
+        }
+
+        // Floating Bottom Bar Container
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Bottom-docked mini-player when collapsed
+            if (!isPlayerExpanded && activeTab != null && activeTab?.videoId?.isNotEmpty() == true) {
+                MiniPlayer(
+                    activeTab = activeTab,
+                    playbackService = playbackService,
+                    onExpand = { viewModel.setPlayerExpanded(true) },
+                    onClose = { activeTab?.let { viewModel.closeTab(it.tabId) } }
+                )
+            }
+
+            // Floating Pill-Shaped Material You Bottom Navigation Bar with completely transparent background
+            FloatingPillNavBar(
+                currentNav = currentNav,
+                onNavSelect = { viewModel.setNavSection(it) },
+                isLoggedIn = isLoggedIn,
+                unreadNotificationCount = unreadNotificationCount
+            )
         }
     }
 }

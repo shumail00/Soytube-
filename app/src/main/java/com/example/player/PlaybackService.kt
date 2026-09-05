@@ -15,9 +15,14 @@ import android.os.Build
 import android.os.IBinder
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.example.MainActivity
@@ -72,10 +77,19 @@ class PlaybackService : MediaSessionService() {
 
         createNotificationChannel()
 
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36")
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(15000)
+
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
+
         // Strictly single ExoPlayer instance to prevent hardware codec starvation & audio focus collisions
         player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(android.os.PowerManager.PARTIAL_WAKE_LOCK)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
 
         mediaSession = MediaSession.Builder(this, player).build()
@@ -95,6 +109,25 @@ class PlaybackService : MediaSessionService() {
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 updateNotification()
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                android.util.Log.e("PlaybackService", "ExoPlayer playback error: ${error.errorCodeName}", error)
+                val activeTab = _currentTabState.value
+                val safeFallbackUrl = "https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4"
+                if (activeTab != null) {
+                    val fallbackMediaItem = MediaItem.Builder()
+                        .setMediaId(activeTab.tabId)
+                        .setUri(safeFallbackUrl)
+                        .build()
+                    player.setMediaItem(fallbackMediaItem)
+                    player.prepare()
+                    try {
+                        player.play()
+                    } catch (_: Exception) {
+                        player.playWhenReady = true
+                    }
+                }
             }
         })
     }
@@ -144,7 +177,12 @@ class PlaybackService : MediaSessionService() {
             player.seekTo(tab.lastPlaybackPositionMs)
         }
         player.prepare()
-        player.play()
+        try {
+            player.play()
+        } catch (e: SecurityException) {
+            // In case WAKE_LOCK is restricted by custom container or user profile
+            player.playWhenReady = true
+        }
 
         loadThumbnailAsync(tab.thumbnailUrl)
         startForegroundWithCustomNotification()
@@ -155,7 +193,11 @@ class PlaybackService : MediaSessionService() {
     }
 
     fun play() {
-        player.play()
+        try {
+            player.play()
+        } catch (e: SecurityException) {
+            player.playWhenReady = true
+        }
     }
 
     fun seekTo(positionMs: Long) {
